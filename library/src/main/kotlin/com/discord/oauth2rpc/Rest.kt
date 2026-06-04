@@ -2,26 +2,42 @@ package com.discord.oauth2rpc
 
 import com.discord.oauth2rpc.utils.DEFAULTS
 import com.discord.oauth2rpc.utils.DEFAULT_SUPER_PROPERTIES
-import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.Closeable
 import java.util.*
 
 class API(val baseURL: String = DEFAULTS.API_BASE) : Closeable {
-    private val client = HttpClient()
+    private val client = OkHttpClient()
 
     val api: RouteBuilder get() = RouteBuilder(baseURL, client)
 
     override fun close() {
-        client.close()
+        client.dispatcher.executorService.shutdown()
+    }
+}
+
+class OkHttpResponse(val response: okhttp3.Response) {
+    val status: Int get() = response.code
+    private var bodyConsumed = false
+
+    fun bodyAsText(): String {
+        bodyConsumed = true
+        return response.body?.string() ?: ""
+    }
+
+    fun close() {
+        if (!bodyConsumed) response.close()
     }
 }
 
 class RouteBuilder(
     private val baseUrl: String,
-    private val client: HttpClient,
+    private val client: OkHttpClient,
     private val path: String = ""
 ) {
 
@@ -38,52 +54,54 @@ class RouteBuilder(
         return RouteBuilder(baseUrl, client, newPath)
     }
 
-    suspend fun get(block: suspend RequestConfig.() -> Unit = {}): HttpResponse {
-        return execute(HttpMethod.Get, block)
+    suspend fun get(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+        return execute("GET", block)
     }
 
-    suspend fun post(block: suspend RequestConfig.() -> Unit = {}): HttpResponse {
-        return execute(HttpMethod.Post, block)
+    suspend fun post(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+        return execute("POST", block)
     }
 
-    suspend fun delete(block: suspend RequestConfig.() -> Unit = {}): HttpResponse {
-        return execute(HttpMethod.Delete, block)
+    suspend fun delete(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+        return execute("DELETE", block)
     }
 
-    suspend fun patch(block: suspend RequestConfig.() -> Unit = {}): HttpResponse {
-        return execute(HttpMethod.Patch, block)
+    suspend fun patch(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+        return execute("PATCH", block)
     }
 
-    suspend fun put(block: suspend RequestConfig.() -> Unit = {}): HttpResponse {
-        return execute(HttpMethod.Put, block)
+    suspend fun put(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+        return execute("PUT", block)
     }
 
-    private suspend fun execute(method: HttpMethod, block: suspend RequestConfig.() -> Unit): HttpResponse {
+    private suspend fun execute(method: String, block: suspend RequestConfig.() -> Unit): OkHttpResponse {
         val url = baseUrl.trimEnd('/') + "/" + path
-
         val config = RequestConfig().apply { block() }
 
-        return client.request(url) {
-            this.method = method
+        val superPropsBase64 = Base64.getEncoder().encodeToString(
+            JsonObjectMapper.mapToJson(DEFAULT_SUPER_PROPERTIES).toByteArray()
+        )
 
-            val superPropsBase64 = Base64.getEncoder().encodeToString(
-                JsonObjectMapper.mapToJson(DEFAULT_SUPER_PROPERTIES).toByteArray()
-            )
+        val requestBuilder = Request.Builder().url(url)
 
-            config.headers?.forEach { (k, v) -> headers { append(k, v) } }
+        config.headers?.forEach { (k, v) -> requestBuilder.header(k, v) }
+        requestBuilder.header("User-Agent", DEFAULTS.USER_AGENT)
+        requestBuilder.header("X-Super-Properties", superPropsBase64)
 
-            headers {
-                append("User-Agent", DEFAULTS.USER_AGENT)
-                append("X-Super-Properties", superPropsBase64)
+        val contentType = config.headers?.get("Content-Type") ?: "application/json"
+        val body = config.body?.let {
+            when (it) {
+                is String -> it.toRequestBody(contentType.toMediaType())
+                is ByteArray -> it.toRequestBody(contentType.toMediaType())
+                else -> it.toString().toRequestBody(contentType.toMediaType())
             }
+        }
 
-            config.body?.let { body ->
-                when (body) {
-                    is String -> setBody(body)
-                    is ByteArray -> setBody(body)
-                    else -> setBody(body.toString())
-                }
-            }
+        requestBuilder.method(method, body)
+
+        return withContext(Dispatchers.IO) {
+            val response = client.newCall(requestBuilder.build()).execute()
+            OkHttpResponse(response)
         }
     }
 

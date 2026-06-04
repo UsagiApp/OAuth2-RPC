@@ -1,21 +1,27 @@
 package com.discord.oauth2rpc
 
 import com.discord.oauth2rpc.utils.*
-import io.ktor.client.*
-import io.ktor.client.plugins.websocket.*
-import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.json.*
+import kotlinx.coroutines.channels.Channel
+import okhttp3.*
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.random.Random
+
+private sealed class GatewayFrame {
+    data class Text(val text: String) : GatewayFrame()
+    data class Close(val code: Int, val reason: String) : GatewayFrame()
+}
 
 class GatewayClient {
 
-    private var httpClient: HttpClient? = null
-    private var wsSession: WebSocketSession? = null
+    private var httpClient: OkHttpClient? = null
+    private var wsSession: WebSocket? = null
     private var processingJob: Job? = null
     private var heartbeatJob: Job? = null
     private var helloTimerJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val incomingChannel = Channel<GatewayFrame>(Channel.UNLIMITED)
 
     private var lastAck = true
     private var lastHeartbeatAt = 0L
@@ -28,7 +34,7 @@ class GatewayClient {
 
     var onReady: ((ReadyEvent) -> Unit)? = null
     var onClose: ((GatewayCloseInfo) -> Unit)? = null
-    var onDispatch: ((eventName: String, data: JsonElement?, seq: Int?) -> Unit)? = null
+    var onDispatch: ((eventName: String, data: Any?, seq: Int?) -> Unit)? = null
     var onSent: ((Any?) -> Unit)? = null
     var onSession: ((SessionUpdateEvent) -> Unit)? = null
     var onInvalidSession: ((Boolean) -> Unit)? = null
@@ -61,30 +67,54 @@ class GatewayClient {
 
         debug("[gateway] connecting $url")
 
-        httpClient = HttpClient { install(WebSockets) }
-        val session = httpClient!!.webSocketSession(url)
-        wsSession = session
-        onOpen?.invoke()
+        httpClient = OkHttpClient.Builder()
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .build()
+
+        wsSession = httpClient!!.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                response.close()
+                onOpen?.invoke()
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                scope.launch { incomingChannel.send(GatewayFrame.Text(text)) }
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                scope.launch { incomingChannel.send(GatewayFrame.Close(code, reason)) }
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                scope.launch { incomingChannel.send(GatewayFrame.Close(code, reason)) }
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                response?.close()
+                onError?.invoke(t)
+            }
+        })
 
         val helloTimeout = opts.helloTimeoutMs ?: DEFAULTS.HELLO_TIMEOUT_MS
         helloTimerJob = scope.launch {
             delay(helloTimeout)
             debug("[gateway] HELLO timeout")
-            session.close(CloseReason(4009, "HELLO timeout"))
+            wsSession?.close(4009, "HELLO timeout")
             ready.completeExceptionally(Exception("HELLO timeout"))
         }
 
         processingJob = scope.launch {
             try {
-                    for (frame in session.incoming) {
+                for (frame in incomingChannel) {
                     when (frame) {
-                        is Frame.Text -> handleMessage(frame.readText(), opts, ready)
-                        is Frame.Close -> {
-                            val (code, reason) = parseCloseFrame(frame)
-                            handleClose(reason, code)
+                        is GatewayFrame.Text -> handleMessage(frame.text, opts, ready)
+                        is GatewayFrame.Close -> {
+                            handleClose(frame.reason, frame.code)
                             if (!ready.isCompleted) ready.completeExceptionally(Exception("Gateway closed before ready"))
                         }
-                        else -> {}
                     }
                 }
             } catch (e: Exception) {
@@ -101,7 +131,7 @@ class GatewayClient {
         scope.launch {
             try {
                 val jsonStr = buildJsonString(op, d)
-                session.send(Frame.Text(jsonStr))
+                session.send(jsonStr)
                 onSent?.invoke(mapOf("op" to op, "d" to d))
             } catch (e: Exception) { onError?.invoke(e) }
         }
@@ -109,26 +139,26 @@ class GatewayClient {
     }
 
     private fun buildJsonString(op: Int, d: Any?): String {
-        val json = buildJsonObject {
-            put("op", op)
-            when (d) {
-                is JsonElement -> put("d", d)
-                is Map<*, *> -> {
-                    @Suppress("UNCHECKED_CAST")
-                    put("d", Json.parseToJsonElement(JsonObjectMapper.mapToJson(d as Map<String, Any?>)))
-                }
-                is Number -> put("d", d.toInt())
-                is String -> put("d", d)
-                is Boolean -> put("d", d)
-                null -> put("d", JsonNull)
-                else -> put("d", d.toString())
+        val json = JSONObject()
+        json.put("op", op)
+        when (d) {
+            is JSONObject -> json.put("d", d)
+            is JSONArray -> json.put("d", d)
+            is Map<*, *> -> {
+                @Suppress("UNCHECKED_CAST")
+                json.put("d", JSONObject(JsonObjectMapper.mapToJson(d as Map<String, Any?>)))
             }
+            is Number -> json.put("d", d.toInt())
+            is String -> json.put("d", d)
+            is Boolean -> json.put("d", d)
+            null -> json.put("d", JSONObject.NULL)
+            else -> json.put("d", d.toString())
         }
         return json.toString()
     }
 
     fun close(code: Int = 1000, reason: String? = null) {
-        scope.launch { try { wsSession?.close(CloseReason(code.toShort(), reason ?: "")) } catch (_: Exception) {} }
+        scope.launch { wsSession?.close(code, reason ?: "") }
     }
 
     fun disconnect() {
@@ -137,20 +167,20 @@ class GatewayClient {
         helloTimerJob?.cancel()
         processingJob?.cancel()
         scope.launch {
-            try { wsSession?.close() } catch (_: Exception) {}
+            wsSession?.close(1000, "Client disconnect")
             wsSession = null
-            httpClient?.close()
+            httpClient?.dispatcher?.executorService?.shutdown()
             httpClient = null
         }
     }
 
     private fun handleMessage(raw: String, opts: GatewayConnectOptions, ready: CompletableDeferred<Unit>) {
         try {
-            val json = Json.parseToJsonElement(raw).jsonObject
-            val op = json["op"]!!.jsonPrimitive.int
-            val d = json["d"]
-            val s = json["s"]?.jsonPrimitive?.intOrNull
-            val t = json["t"]?.jsonPrimitive?.contentOrNull
+            val json = JSONObject(raw)
+            val op = json.getInt("op")
+            val d = json.opt("d")
+            val s = if (json.has("s") && !json.isNull("s")) json.getInt("s") else null
+            val t = json.optString("t", null)
 
             if (s != null && s > liveSeq) { liveSeq = s; touchSession(seq = s) }
 
@@ -159,7 +189,8 @@ class GatewayClient {
             when (op) {
                 GatewayOp.HELLO -> {
                     helloTimerJob?.cancel()
-                    val interval = d!!.jsonObject["heartbeat_interval"]!!.jsonPrimitive.int
+                    val dObj = d as JSONObject
+                    val interval = dObj.getInt("heartbeat_interval")
                     startHeartbeat(interval.toLong())
                     debug("[gateway] HELLO received, heartbeat_interval=${interval}ms")
                     onHello?.invoke(interval)
@@ -179,7 +210,7 @@ class GatewayClient {
                     forceClose(4000, "server reconnect")
                 }
                 GatewayOp.INVALID_SESSION -> {
-                    val resumable = d?.jsonPrimitive?.boolean ?: false
+                    val resumable = if (d is Boolean) d else false
                     debug("[gateway] INVALID_SESSION resumable=$resumable")
                     if (!resumable) { sessionState = null; touchSession(sessionId = null, resumeGatewayUrl = null, seq = 0) }
                     onInvalidSession?.invoke(resumable)
@@ -190,15 +221,11 @@ class GatewayClient {
         } catch (e: Exception) { onError?.invoke(e) }
     }
 
-    private fun handleDispatch(t: String, d: JsonElement?, s: Int?) {
+    private fun handleDispatch(t: String, d: Any?, s: Int?) {
         when (t) {
             "READY" -> {
-                val obj = d!!.jsonObject
-                val userObj = obj["user"]!!.jsonObject
-                val re = ReadyEvent(
-                    ReadyUser(userObj["id"]!!.jsonPrimitive.content, userObj["username"]!!.jsonPrimitive.content, userObj["global_name"]?.jsonPrimitive?.contentOrNull),
-                    obj["session_id"]!!.jsonPrimitive.content, obj["resume_gateway_url"]!!.jsonPrimitive.content
-                )
+                val obj = d as JSONObject
+                val re = ReadyEvent.fromJson(obj)
                 debug("[gateway] READY: user=${re.user.username} (${re.user.id}) session=${re.sessionId}")
                 sessionState = SessionState(re.sessionId, liveSeq, re.resumeGatewayUrl)
                 touchSession(re.sessionId, liveSeq, re.resumeGatewayUrl)
@@ -234,14 +261,15 @@ class GatewayClient {
             }
             freeze()
         }
-        val d = buildJsonObject {
-            put("capabilities", caps.bitfield); put("intents", ints.bitfield); put("token", token)
-            putJsonObject("properties") {
-                DEFAULT_SUPER_PROPERTIES.forEach { (k, v) ->
-                    when (v) { is String -> put(k, v); is Int -> put(k, v); is Boolean -> put(k, v) }
-                }
-            }
+        val d = JSONObject()
+        d.put("capabilities", caps.bitfield)
+        d.put("intents", ints.bitfield)
+        d.put("token", token)
+        val properties = JSONObject()
+        DEFAULT_SUPER_PROPERTIES.forEach { (k, v) ->
+            when (v) { is String -> properties.put(k, v); is Int -> properties.put(k, v); is Boolean -> properties.put(k, v) }
         }
+        d.put("properties", properties)
         onIdentify?.invoke(); debug("[gateway] sending IDENTIFY")
         send(GatewayOp.IDENTIFY, d)
     }
@@ -249,9 +277,9 @@ class GatewayClient {
     private fun sendResume() {
         val s = sessionState ?: return
         onResume?.invoke(); debug("[gateway] sending RESUME")
-        send(GatewayOp.RESUME, buildJsonObject {
-            put("token", token); put("session_id", s.sessionId); put("seq", s.seq)
-        })
+        val d = JSONObject()
+        d.put("token", token); d.put("session_id", s.sessionId); d.put("seq", s.seq)
+        send(GatewayOp.RESUME, d)
     }
 
     private fun startHeartbeat(intervalMs: Long) {
@@ -282,7 +310,7 @@ class GatewayClient {
     }
 
     private fun forceClose(code: Int, reason: String) {
-        scope.launch { try { wsSession?.close(CloseReason(code.toShort(), reason)) } catch (_: Exception) {} }
+        scope.launch { wsSession?.close(code, reason) }
     }
 
     private fun handleClose(reason: String, code: Int) {
@@ -294,14 +322,6 @@ class GatewayClient {
         wsSession = null
         onClose?.invoke(GatewayCloseInfo(code, reason, !fatal && snapshot != null, snapshot))
         debug("[gateway] close code=$code reason=$reason resumable=${!fatal && snapshot != null}")
-    }
-
-    private fun parseCloseFrame(frame: Frame.Close): Pair<Int, String> {
-        val data = frame.data ?: return Pair(1000, "")
-        if (data.size < 2) return Pair(1000, "")
-        val code = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
-        val reason = if (data.size > 2) data.copyOfRange(2, data.size).decodeToString() else ""
-        return Pair(code, reason)
     }
 
     private fun debug(msg: String) { onDebug?.invoke(msg) }

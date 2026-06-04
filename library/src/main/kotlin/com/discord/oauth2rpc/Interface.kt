@@ -1,17 +1,29 @@
 package com.discord.oauth2rpc
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import org.json.JSONObject
 
-@Serializable
 data class TokenResponse(
-    @SerialName("token_type") val tokenType: String,
-    @SerialName("access_token") val accessToken: String,
-    @SerialName("expires_in") val expiresIn: Int,
-    @SerialName("refresh_token") val refreshToken: String,
+    val tokenType: String,
+    val accessToken: String,
+    val expiresIn: Int,
+    val refreshToken: String,
     val scope: String,
-    @SerialName("id_token") val idToken: String? = null
-)
+    val idToken: String? = null
+) {
+    companion object {
+        fun fromJson(json: String): TokenResponse {
+            val obj = JSONObject(json)
+            return TokenResponse(
+                tokenType = obj.getString("token_type"),
+                accessToken = obj.getString("access_token"),
+                expiresIn = obj.getInt("expires_in"),
+                refreshToken = obj.getString("refresh_token"),
+                scope = obj.optString("scope", ""),
+                idToken = obj.optString("id_token", null)
+            )
+        }
+    }
+}
 
 data class SessionState(
     val sessionId: String,
@@ -56,16 +68,29 @@ data class SessionUpdateEvent(
     val resumeGatewayUrl: String?
 )
 
-@Serializable
 data class ReadyEvent(
     val user: ReadyUser,
-    @SerialName("session_id") val sessionId: String,
-    @SerialName("resume_gateway_url") val resumeGatewayUrl: String
-)
+    val sessionId: String,
+    val resumeGatewayUrl: String
+) {
+    companion object {
+        fun fromJson(obj: JSONObject): ReadyEvent {
+            val userObj = obj.getJSONObject("user")
+            return ReadyEvent(
+                user = ReadyUser(
+                    id = userObj.getString("id"),
+                    username = userObj.getString("username"),
+                    globalName = userObj.optString("global_name", null)
+                ),
+                sessionId = obj.getString("session_id"),
+                resumeGatewayUrl = obj.getString("resume_gateway_url")
+            )
+        }
+    }
+}
 
-@Serializable
 data class ReadyUser(
     val id: String,
     val username: String,
-    @SerialName("global_name") val globalName: String? = null
+    val globalName: String? = null
 )

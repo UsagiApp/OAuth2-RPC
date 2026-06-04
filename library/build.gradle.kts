@@ -1,6 +1,5 @@
 plugins {
     kotlin("jvm")
-    kotlin("plugin.serialization")
     `java-library`
     `maven-publish`
 }
@@ -14,10 +13,8 @@ repositories {
 
 dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    api("io.ktor:ktor-client-core:2.3.12")
-    api("io.ktor:ktor-client-okhttp:2.3.12")
-    api("io.ktor:ktor-client-websockets:2.3.12")
+    api("com.squareup.okhttp3:okhttp:4.12.0")
+    api("org.json:json:20240303")
 }
 
 java {

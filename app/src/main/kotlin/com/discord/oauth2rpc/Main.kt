@@ -6,8 +6,8 @@ import com.discord.oauth2rpc.structures.SpotifyRPC
 import com.discord.oauth2rpc.utils.*
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.*
-import io.ktor.client.statement.*
-import kotlinx.serialization.json.*
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.InetSocketAddress
 import java.net.URI
 import java.net.URLDecoder
@@ -89,25 +89,25 @@ fun main() = runBlocking {
                     body = "client_id=$CLIENT_ID&grant_type=authorization_code&code=$code&code_verifier=$codeVerifier&redirect_uri=${URLEncoder.encode(getRedirectURI(), "UTF-8")}"
                 }
 
-                if (!resp.status.value.toString().startsWith("2")) {
+                if (resp.status !in 200..299) {
                     sendResponse(exchange, 500, "Token exchange failed: ${resp.status} - ${resp.bodyAsText()}")
                     return@launch
                 }
 
-                val tokenData = Json.decodeFromString<TokenResponse>(resp.bodyAsText())
+                val tokenData = TokenResponse.fromJson(resp.bodyAsText())
 
                 val userResp = rest.api["users"]["@me"].get {
                     headers = mapOf("Authorization" to "${tokenData.tokenType} ${tokenData.accessToken}")
                 }
 
-                if (!userResp.status.value.toString().startsWith("2")) {
+                if (userResp.status !in 200..299) {
                     sendResponse(exchange, 500, "Failed to fetch user info: ${userResp.status} - ${userResp.bodyAsText()}")
                     return@launch
                 }
 
                 val bodyText = userResp.bodyAsText()
-                val userDataJson = Json.parseToJsonElement(bodyText).jsonObject
-                val userId = userDataJson["id"]!!.jsonPrimitive.content
+                val userDataJson = JSONObject(bodyText)
+                val userId = userDataJson.getString("id")
                 mapUser[userId] = tokenData
 
                 try {
@@ -180,16 +180,16 @@ fun main() = runBlocking {
 
         val custom = CustomStatus().setEmoji(EmojiIdentifierResolvable.StringVal("😋")).setState("yum")
 
-        val presenceJson = buildJsonObject {
-            putJsonArray("activities") {
-                add(Json.parseToJsonElement(JsonObjectMapper.mapToJson(spotifyRPC.toJSON() as Map<String, Any>)))
-                add(Json.parseToJsonElement(JsonObjectMapper.mapToJson(status.toJSON() as Map<String, Any>)))
-                add(Json.parseToJsonElement(JsonObjectMapper.mapToJson(custom.toJSON() as Map<String, Any>)))
-            }
-            put("afk", false)
-            put("since", "0")
-            put("status", "idle")
-        }
+        val activities = JSONArray()
+        activities.put(JSONObject(JsonObjectMapper.mapToJson(spotifyRPC.toJSON() as Map<String, Any>)))
+        activities.put(JSONObject(JsonObjectMapper.mapToJson(status.toJSON() as Map<String, Any>)))
+        activities.put(JSONObject(JsonObjectMapper.mapToJson(custom.toJSON() as Map<String, Any>)))
+
+        val presenceJson = JSONObject()
+        presenceJson.put("activities", activities)
+        presenceJson.put("afk", false)
+        presenceJson.put("since", "0")
+        presenceJson.put("status", "idle")
 
         gateway.send(GatewayOp.PRESENCE_UPDATE, presenceJson)
     }

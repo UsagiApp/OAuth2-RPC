@@ -3,8 +3,8 @@ package com.discord.oauth2rpc.utils
 import com.discord.oauth2rpc.API
 import com.discord.oauth2rpc.JsonObjectMapper
 import com.discord.oauth2rpc.TokenResponse
-import io.ktor.client.statement.*
-import kotlinx.serialization.json.*
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -35,7 +35,6 @@ object Util {
             val element = (obj as Map<*, *>)[prop]
             when {
                 element is List<*> -> out[prop] = element.map { e -> if (e is Map<*, *>) flatten(e) else e }
-                element is JsonElement -> out[prop] = element.toString()
                 element is Map<*, *> -> out[prop] = flatten(element)
                 else -> out[prop] = element
             }
@@ -131,11 +130,11 @@ object Util {
             headers = mapOf("Authorization" to token, "Content-Type" to "application/json")
             body = JsonObjectMapper.mapToJson(mapOf("urls" to images.toList()))
         }
-        val json = Json.parseToJsonElement(res.bodyAsText()).jsonArray
-        return json.map { element ->
-            val obj = element.jsonObject
-            mapOf("url" to (obj["url"]?.jsonPrimitive?.contentOrNull ?: ""),
-                  "external_asset_path" to (obj["external_asset_path"]?.jsonPrimitive?.contentOrNull ?: ""))
+        val json = JSONArray(res.bodyAsText())
+        return (0 until json.length()).map { i ->
+            val obj = json.getJSONObject(i)
+            mapOf("url" to (obj.optString("url", "")),
+                  "external_asset_path" to (obj.optString("external_asset_path", "")))
         }
     }
 
@@ -144,13 +143,13 @@ object Util {
             headers = mapOf("Authorization" to token, "Content-Type" to "application/x-www-form-urlencoded")
             body = "client_id=${URLEncoder.encode(clientId, "UTF-8")}&refresh_token=${URLEncoder.encode(oldData.refreshToken, "UTF-8")}&grant_type=refresh_token"
         }
-        if (!res.status.value.toString().startsWith("2")) {
-            val json = Json.parseToJsonElement(res.bodyAsText()).jsonObject
-            if (json["error"]?.jsonPrimitive?.contentOrNull == "invalid_client")
+        if (res.status !in 200..299) {
+            val json = JSONObject(res.bodyAsText())
+            if (json.optString("error") == "invalid_client")
                 throw Exception("You must have the PUBLIC_OAUTH2_CLIENT application flag set.")
             else
                 throw Exception("Failed to refresh token: ${res.status} - ${res.bodyAsText()}")
         }
-        return Json.decodeFromString(res.bodyAsText())
+        return TokenResponse.fromJson(res.bodyAsText())
     }
 }
