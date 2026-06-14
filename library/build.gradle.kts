@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.discord"
-version = System.getenv("LIB_VERSION") ?: "1.0.0"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -34,7 +34,7 @@ publishing {
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/sang765/Discord-OAuth2-RPC")
+            url = uri("https://maven.pkg.github.com/UsagiApp/OAuth2-RPC")
             credentials {
                 username = System.getenv("GITHUB_ACTOR") ?: ""
                 password = System.getenv("GITHUB_TOKEN") ?: ""

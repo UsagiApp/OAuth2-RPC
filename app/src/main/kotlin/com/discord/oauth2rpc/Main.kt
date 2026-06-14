@@ -17,7 +17,7 @@ import java.security.SecureRandom
 import java.util.*
 import java.util.concurrent.Executors
 
-private const val CLIENT_ID = "<application_id>"
+private const val CLIENT_ID = "1515827408631103488"
 private val SCOPE = listOf("openid", "sdk.social_layer_presence").joinToString(" ")
 private const val REDIRECT_URI = "http://127.0.0.1/callback"
 
