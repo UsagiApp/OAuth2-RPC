@@ -10,14 +10,14 @@ class DiscordAssetRegistrar(
 ) {
     private val cache = mutableMapOf<String, String>()
 
-    suspend fun resolve(image: String): String {
+    suspend fun resolve(image: String, contentRating: Int = 0): String {
         cache[image]?.let { return it }
-        val resolved = resolveInternal(image)
+        val resolved = resolveInternal(image, contentRating)
         cache[image] = resolved
         return resolved
     }
 
-    suspend fun resolveAll(vararg images: String): List<String> {
+    suspend fun resolveAll(vararg images: String, contentRating: Int = 0): List<String> {
         val results = arrayOfNulls<String>(images.size)
         val externalUrls = mutableListOf<Pair<Int, String>>()
         for ((i, image) in images.withIndex()) {
@@ -34,7 +34,7 @@ class DiscordAssetRegistrar(
         }
         if (externalUrls.isNotEmpty()) {
             val urls = externalUrls.map { it.second }.toTypedArray()
-            val registered = register(*urls)
+            val registered = register(*urls, contentRating = contentRating)
             for ((idx, reg) in registered.withIndex()) {
                 val originalIdx = externalUrls[idx].first
                 results[originalIdx] = reg.resolved
@@ -43,14 +43,18 @@ class DiscordAssetRegistrar(
         return results.filterNotNull()
     }
 
-    suspend fun register(vararg urls: String): List<RegisterResult> {
+    suspend fun register(vararg urls: String, contentRating: Int = 0): List<RegisterResult> {
         require(urls.isNotEmpty()) { "At least one URL must be provided" }
         require(urls.all { isValidHttpUrl(it) }) { "Each value must be a valid HTTP(S) URL" }
+        require(contentRating in 0..1) { "contentRating must be 0 (SFW) or 1 (NSFW)" }
         val uncached = urls.filter { it !in cache }
         if (uncached.isNotEmpty()) {
             val res = rest.api["applications"][applicationId]["external-assets"].post {
                 headers = mapOf("Authorization" to token, "Content-Type" to "application/json")
-                body = JsonObjectMapper.mapToJson(mapOf("urls" to uncached.toList()))
+                body = JsonObjectMapper.mapToJson(mapOf("urls" to uncached.toList(), "content_rating" to contentRating))
+            }
+            if (res.status !in 200..299) {
+                throw Exception("Failed to register external assets: ${res.status} - ${res.bodyAsText()}")
             }
             val json = JSONArray(res.bodyAsText())
             for (i in 0 until json.length()) {
@@ -90,14 +94,14 @@ class DiscordAssetRegistrar(
         return image
     }
 
-    private suspend fun resolveInternal(image: String): String {
+    private suspend fun resolveInternal(image: String, contentRating: Int = 0): String {
         val immediate = resolveImmediate(image)
         if (immediate != image) {
             cache[image] = immediate
             return immediate
         }
         if (isValidHttpUrl(image)) {
-            val result = register(image)
+            val result = register(image, contentRating = contentRating)
             if (result.isNotEmpty()) return result.first().resolved
         }
         return image

@@ -118,7 +118,7 @@ object Util {
     }
 
     suspend fun getExternal(
-        rest: API, token: String, applicationId: String, vararg images: String
+        rest: API, token: String, applicationId: String, vararg images: String, contentRating: Int = 0
     ): List<Map<String, String>> {
         require(Regex("^[0-9]{17,19}$").matches(applicationId)) { "Application id must be a Discord Snowflake" }
         require(images.size <= 2) { "RichPresence can only have up to 2 external images" }
@@ -126,9 +126,13 @@ object Util {
             try { val u = URI(it); u.scheme == "http" || u.scheme == "https" }
             catch (_: Exception) { false }
         }) { "Each image must be a valid URL" }
+        require(contentRating in 0..1) { "contentRating must be 0 (SFW) or 1 (NSFW)" }
         val res = rest.api["applications"][applicationId]["external-assets"].post {
             headers = mapOf("Authorization" to token, "Content-Type" to "application/json")
-            body = JsonObjectMapper.mapToJson(mapOf("urls" to images.toList()))
+            body = JsonObjectMapper.mapToJson(mapOf("urls" to images.toList(), "content_rating" to contentRating))
+        }
+        if (res.status !in 200..299) {
+            throw Exception("Failed to register external assets: ${res.status} - ${res.bodyAsText()}")
         }
         val json = JSONArray(res.bodyAsText())
         return (0 until json.length()).map { i ->
