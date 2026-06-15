@@ -5,16 +5,16 @@ plugins {
 }
 
 group = "com.discord"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    api("com.squareup.okhttp3:okhttp:4.12.0")
-    api("org.json:json:20240303")
+    api(libs.kotlinx.coroutines.core)
+    api(libs.okhttp)
+    api(libs.json)
 }
 
 java {
