@@ -44,8 +44,8 @@ The core library (in `library/src/main/kotlin/com/discord/oauth2rpc/`) provides:
 | `utils/` | `BitField`, `Intents`, `GatewayCapabilities`, `ActivityFlags`, `Constants`, `Util` |
 
 ### Dependencies
-- `ktor-client-okhttp` + `ktor-client-websockets` — HTTP & WebSocket
-- `kotlinx-serialization-json` — JSON parsing
+- `okhttp` — HTTP & WebSocket
+- `org.json:json` — JSON parsing
 - `kotlinx-coroutines` — async concurrency
 
 ## Setup
