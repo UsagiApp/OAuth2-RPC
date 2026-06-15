@@ -1,7 +1,7 @@
 package com.discord.oauth2rpc.utils
 
 class ActivityFlags(bits: Int = 0) : BitField(bits) {
-    override val flags: Map<String, Int> get() = Companion.FLAGS
+    override val flags: Map<String, Int> get() = FLAGS
 
     companion object {
         val FLAGS: Map<String, Int> = mapOf(

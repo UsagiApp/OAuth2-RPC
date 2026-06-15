@@ -50,13 +50,13 @@ open class RichPresence(sessionId: String? = null) {
 
     fun setStartTimestamp(timestamp: Any?): RichPresence {
         if (timestamps == null) timestamps = mutableMapOf("start" to null, "end" to null)
-        timestamps!!["start"] = when (timestamp) { is Long -> timestamp; is Int -> timestamp.toLong(); is java.util.Date -> timestamp.time; else -> null }
+        timestamps!!["start"] = when (timestamp) { is Long -> timestamp; is Int -> timestamp.toLong(); is Date -> timestamp.time; else -> null }
         return this
     }
 
     fun setEndTimestamp(timestamp: Any?): RichPresence {
         if (timestamps == null) timestamps = mutableMapOf("start" to null, "end" to null)
-        timestamps!!["end"] = when (timestamp) { is Long -> timestamp; is Int -> timestamp.toLong(); is java.util.Date -> timestamp.time; else -> null }
+        timestamps!!["end"] = when (timestamp) { is Long -> timestamp; is Int -> timestamp.toLong(); is Date -> timestamp.time; else -> null }
         return this
     }
 
@@ -93,7 +93,7 @@ open class RichPresence(sessionId: String? = null) {
     fun setJoinSecret(join: String?): RichPresence { secrets["join"] = join; return this }
 
     open fun toJSON(): Map<String, Any?> {
-        val result = mutableMapOf<String, Any?>(
+        val result = mutableMapOf(
             "name" to name, "type" to type, "url" to url, "state" to state, "details" to details,
             "application_id" to applicationId,
             "timestamps" to timestamps?.let { mapOf("start" to it["start"], "end" to it["end"]) },

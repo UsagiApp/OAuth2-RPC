@@ -27,7 +27,7 @@ class OkHttpResponse(val response: okhttp3.Response) {
 
     fun bodyAsText(): String {
         bodyConsumed = true
-        return response.body?.string() ?: ""
+        return response.body.string()
     }
 
     fun close() {
@@ -54,27 +54,27 @@ class RouteBuilder(
         return RouteBuilder(baseUrl, client, newPath)
     }
 
-    suspend fun get(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+    suspend fun get(block: RequestConfig.() -> Unit = {}): OkHttpResponse {
         return execute("GET", block)
     }
 
-    suspend fun post(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+    suspend fun post(block: RequestConfig.() -> Unit = {}): OkHttpResponse {
         return execute("POST", block)
     }
 
-    suspend fun delete(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+    suspend fun delete(block: RequestConfig.() -> Unit = {}): OkHttpResponse {
         return execute("DELETE", block)
     }
 
-    suspend fun patch(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+    suspend fun patch(block: RequestConfig.() -> Unit = {}): OkHttpResponse {
         return execute("PATCH", block)
     }
 
-    suspend fun put(block: suspend RequestConfig.() -> Unit = {}): OkHttpResponse {
+    suspend fun put(block: RequestConfig.() -> Unit = {}): OkHttpResponse {
         return execute("PUT", block)
     }
 
-    private suspend fun execute(method: String, block: suspend RequestConfig.() -> Unit): OkHttpResponse {
+    private suspend fun execute(method: String, block: RequestConfig.() -> Unit): OkHttpResponse {
         val url = baseUrl.trimEnd('/') + "/" + path
         val config = RequestConfig().apply { block() }
 

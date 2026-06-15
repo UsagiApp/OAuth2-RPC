@@ -1,6 +1,6 @@
 package com.discord.oauth2rpc.utils
 
-open class BitField(bits: Int = defaultBit) {
+open class BitField(bits: Int = DEFAULT_BIT) {
 
     var bitfield: Int = resolve(bits)
         protected set
@@ -9,7 +9,7 @@ open class BitField(bits: Int = defaultBit) {
 
     fun any(bit: Int): Boolean {
         if (bit == 0) return bitfield == 0
-        return (bitfield and resolve(bit)) != defaultBit
+        return (bitfield and resolve(bit)) != DEFAULT_BIT
     }
 
     fun equals(bit: Int): Boolean = bitfield == resolve(bit)
@@ -44,16 +44,16 @@ open class BitField(bits: Int = defaultBit) {
     fun valueOf(): Int = bitfield
 
     protected open fun resolve(bit: Int): Int {
-        if (bit >= defaultBit) return bit
+        if (bit >= DEFAULT_BIT) return bit
         return flags[bit.toString()] ?: bit
     }
 
     private var isFrozen = false
 
     companion object {
-        const val defaultBit: Int = 0
+        const val DEFAULT_BIT: Int = 0
 
-        fun resolve(bit: Int?, defaultBit: Int = this.defaultBit): Int {
+        fun resolve(bit: Int?, defaultBit: Int = this.DEFAULT_BIT): Int {
             if (bit == null) return defaultBit
             return bit
         }

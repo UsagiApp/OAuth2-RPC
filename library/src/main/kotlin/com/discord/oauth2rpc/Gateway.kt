@@ -210,7 +210,7 @@ class GatewayClient {
                     forceClose(4000, "server reconnect")
                 }
                 GatewayOp.INVALID_SESSION -> {
-                    val resumable = if (d is Boolean) d else false
+                    val resumable = d as? Boolean ?: false
                     debug("[gateway] INVALID_SESSION resumable=$resumable")
                     if (!resumable) { sessionState = null; touchSession(sessionId = null, resumeGatewayUrl = null, seq = 0) }
                     onInvalidSession?.invoke(resumable)

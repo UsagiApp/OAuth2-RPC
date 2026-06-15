@@ -32,10 +32,10 @@ object Util {
         }
         val out = mutableMapOf<String, Any?>()
         for ((prop, _) in mergedProps) {
-            val element = (obj as Map<*, *>)[prop]
-            when {
-                element is List<*> -> out[prop] = element.map { e -> if (e is Map<*, *>) flatten(e) else e }
-                element is Map<*, *> -> out[prop] = flatten(element)
+            val element = obj[prop]
+            when (element) {
+                is List<*> -> out[prop] = element.map { e -> if (e is Map<*, *>) flatten(e) else e }
+                is Map<*, *> -> out[prop] = flatten(element)
                 else -> out[prop] = element
             }
         }
@@ -95,7 +95,7 @@ object Util {
                 else -> data[key] = value
             }
         }
-        return if (data.isNotEmpty()) data else null
+        return data.ifEmpty { null }
     }
 
     fun parseImage(image: Any?): String? {
@@ -108,7 +108,7 @@ object Util {
             uri.scheme == "http" || uri.scheme == "https"
         } catch (_: Exception) { false }
         if (!isValidUrl) return image
-        var result = image
+        val result = image
             .replace("https://cdn.discordapp.com/", "mp:")
             .replace("http://cdn.discordapp.com/", "mp:")
             .replace("https://media.discordapp.net/", "mp:")
