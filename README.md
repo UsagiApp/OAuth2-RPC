@@ -1,52 +1,39 @@
-# Discord OAuth2 RPC PoC (Kotlin)
+# OAuth2 RPC (Kotlin)
 
-This project is a Proof of Concept (PoC) that implements a small portion of the **Discord OAuth2** flow and **Rich Presence** updates via the Discord Gateway WebSocket — now rewritten in **Kotlin**.
+This project is a Proof of Concept (PoC) that implements a small portion of the **Discord OAuth2** flow and **Rich Presence** updates via the Discord Gateway WebSocket.
 
-## 🔄 Workflow
+[![Version](https://jitpack.io/v/UsagiApp/OAuth2-RPC.svg)](https://jitpack.io/#UsagiApp/OAuth2-RPC) ![License](https://img.shields.io/github/license/UsagiApp/OAuth2-RPC)
 
-1. Proceed with the **Standard OAuth2** (PKCE) flow to authenticate the user.
-2. Obtain a **Bearer Token** from the authorization process.
-3. Use this token to connect directly to the **Discord WebSocket** to maintain the connection and send state payloads (Presence, Activities, etc.).
+## Usage
 
-> [!NOTE]
-> This demo is designed to be minimalistic to prove feasibility. Therefore, **it does not focus on security aspects** or the **long-term storage of Tokens**. In a real-world application, you would need to implement token encryption mechanisms, secure storage (like Keychain/Keystore), and handle Refresh Tokens properly.
+1. Add it to your root `build.gradle` at the end of repositories:
 
-## 🚀 Deployment Guide
+   ```groovy
+   allprojects {
+       repositories {
+           ...
+           maven { url 'https://jitpack.io' }
+       }
+   }
+   ```
 
-### Prerequisites
-- JDK 17+
-- Gradle (or use the included wrapper)
+2. Add the dependency (in your Java / Kotlin / Android project)
 
-### Step 1: Create an Application
-Go to the [Discord Developer Portal](https://discord.com/developers/applications) and create a new Application.
+    ```groovy
+    dependencies {
+       implementation("com.github.UsagiApp:OAuth2-RPC:$version")
+    }
+    ```
 
-### Step 2: Unlock the Social SDK Feature
-Fill out the Social SDK registration form (**Games** > **Social SDK**) to unlock this feature for your Application.
+    Versions are available on [JitPack](https://jitpack.io/#UsagiApp/OAuth2-RPC)
 
-*Note: The information in the form does not require absolute accuracy; you can fill it with dummy data to pass the review.*
+    When used in Android
+    projects, [core library desugaring](https://developer.android.com/studio/write/java8-support#library-desugaring) with
+    the [NIO specification](https://developer.android.com/studio/write/java11-nio-support-table) should be enabled to support Java 8+ features.
 
-<img src="https://blog.shizuku.tech/_astro/post-1.DWXDXVUN_sPsAA.webp">
+## Project structure
 
-### Step 3: Configure OAuth2
-- Go to the newly created Application > Select the **OAuth2** tab.
-- Enable the **"Public Client"** setting.
-- Add your **Redirects URL** to the list (`http://127.0.0.1/callback`).
-
-### Step 4: Start the Source Code
-- Update `CLIENT_ID` in `src/main/kotlin/com/discord/oauth2rpc/Main.kt`.
-- Run:
-
-```sh
-$ ./gradlew run
-```
-
-- Proceed with the OAuth2 flow just like authorizing a bot. After a short while, the RPC will appear on the user's account.
-
-- The bearer token remains valid for up to 7 days. You can use the refresh flow to renew its expiration and continue using the token.
-
-## Library Usage
-
-The core library (`src/main/kotlin/com/discord/oauth2rpc/`) provides:
+The core library (in `library/src/main/kotlin/com/discord/oauth2rpc/`) provides:
 
 | Component | Description |
 |---|---|
@@ -61,7 +48,29 @@ The core library (`src/main/kotlin/com/discord/oauth2rpc/`) provides:
 - `kotlinx-serialization-json` — JSON parsing
 - `kotlinx-coroutines` — async concurrency
 
+## Setup
+
+### Prerequisites
+- JDK 17+
+- Gradle (or use the included wrapper)
+
+### Step 1: Create an Application
+Go to the [Discord Developer Portal](https://discord.com/developers/applications) and create a new Application.
+
+### Step 2: Unlock the Social SDK Feature
+Fill out the Social SDK registration form (**Games** > **Social SDK**) to unlock this feature for your Application.
+
+<img src=".github/assets/1.png">
+
+### Step 3: Configure OAuth2
+- Go to the newly created Application > Select the **OAuth2** tab.
+- Enable the **"Public Client"** setting.
+- Add your **Redirects URL** to the list (`usagi://discord-auth` **OR** `kotatsu://discord-auth`), depends on your application.
+
+> [!NOTE]
+> The bearer token remains valid for up to 7 days. You can use the refresh flow to renew its expiration and continue using the token.
+
 ## Credits
 
 - The images used in this README are sourced from @chirina's Discord Widget tutorial.
-- Original TS implementation by @aiko-chan-ai.
+- Original TS implementation by [Elysia](https://github.com/aiko-chan-ai), rewritten by [Hà Tiến Sáng](https://github.com/sang765) and modified by [Draken](https://github.com/dragonx943).
