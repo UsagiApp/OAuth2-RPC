@@ -72,4 +72,5 @@ Fill out the Social SDK registration form (**Games** > **Social SDK**) to unlock
 
 ## Credits
 
-- Original TS implementation by [Elysia](https://github.com/aiko-chan-ai), rewritten in Kotlin by [Hà Tiến Sáng](https://github.com/sang765) and modified by [Draken](https://github.com/dragonx943)
+- Original TS implementation by [Elysia](https://github.com/aiko-chan-ai).
+- Rewritten in Kotlin by [Hà Tiến Sáng](https://github.com/sang765), modified by [Draken](https://github.com/dragonx943).
